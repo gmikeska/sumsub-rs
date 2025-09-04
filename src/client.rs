@@ -153,6 +153,13 @@ impl Client {
         let response = self
             .send_request(Method::POST, &path, Some(request))
             .await?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(SumsubError::ApiError { status, message });
+        }
+
         response.json().await.map_err(SumsubError::from)
     }
 

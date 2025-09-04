@@ -1,6 +1,6 @@
 use std::env;
 use sumsub_api::client::Client;
-use sumsub_api::models::{CreateApplicantRequest, FixedInfo, Info};
+use sumsub_api::models::{CreateApplicantRequest, FixedInfo};
 use uuid::Uuid;
 
 // Helper function to initialize the client from environment variables.
@@ -14,38 +14,45 @@ fn setup_client() -> Client {
 }
 
 #[tokio::test]
-#[ignore] // Ignored by default to prevent running against live API without explicit command.
 async fn test_create_and_get_applicant() {
     let client = setup_client();
     let external_user_id = Uuid::new_v4().to_string();
 
     let request = CreateApplicantRequest {
         external_user_id: external_user_id.clone(),
-        info: Info {
+        fixed_info: Some(FixedInfo {
             first_name: Some("John".to_string()),
             last_name: Some("Doe".to_string()),
             ..Default::default()
-        },
+        }),
         ..Default::default()
     };
 
-    let level_name = "basic-kyc-level"; // Use a valid level name from your Sumsub dashboard
+    let level_name = "id-and-liveness";
 
     let create_result = client.create_applicant(request, level_name).await;
-    assert!(create_result.is_ok(), "Failed to create applicant: {:?}", create_result.err());
+    match create_result {
+        Ok(applicant) => {
+            // The request succeeded, so we'll proceed with the rest of the assertions.
+            assert_eq!(applicant.external_user_id, external_user_id);
 
-    let applicant = create_result.unwrap();
-    assert_eq!(applicant.external_user_id, external_user_id);
+            let get_result = client.get_applicant_data(&applicant.id).await;
+            assert!(get_result.is_ok(), "Failed to get applicant data: {:?}", get_result.err());
 
-    let get_result = client.get_applicant_data(&applicant.id).await;
-    assert!(get_result.is_ok(), "Failed to get applicant data: {:?}", get_result.err());
-
-    let fetched_applicant = get_result.unwrap();
-    assert_eq!(fetched_applicant.id, applicant.id);
+            let fetched_applicant = get_result.unwrap();
+            assert_eq!(fetched_applicant.id, applicant.id);
+        }
+        Err(e) => {
+            // The API call failed. This is unexpected with a valid level name.
+            panic!(
+                "API call failed unexpectedly with level name '{}'. Error: {}",
+                level_name, e
+            );
+        }
+    }
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_get_api_health_status() {
     let client = setup_client();
     let result = client.get_api_health_status().await;
@@ -53,7 +60,6 @@ async fn test_get_api_health_status() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_get_applicant_actions() {
     // This test requires an applicant to exist.
     // For a real test suite, you'd create an applicant in a setup function.
@@ -74,7 +80,6 @@ async fn test_get_applicant_actions() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_get_transaction_data() {
     let client = setup_client();
 
