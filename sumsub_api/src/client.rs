@@ -15,7 +15,7 @@ use crate::misc::{ApiHealthStatus, AuditTrailEvent};
 use crate::actions::{ApplicantAction, CreateApplicantActionRequest, GetApplicantActionsResponse, Questionnaire, RequestActionCheckResponse};
 use crate::kyb::{CompanyInfo, GetAdditionalCompanyCheckDataResponse, LinkBeneficiaryRequest};
 use crate::transactions::{BulkTransactionImportRequest, BulkTransactionImportResponse, DeleteTransactionResponse, SubmitTransactionRequest, SubmitTransactionResponse};
-use crate::travel_rule::{ConfirmWalletOwnershipRequest, InitiateSdkRequest, InitiateSdkResponse, OwnershipStatus, PatchTransactionRequest};
+use crate::travel_rule::{ConfirmWalletOwnershipRequest, ImportWalletAddressesRequest, ImportWalletAddressesResponse, InitiateSdkRequest, InitiateSdkResponse, OwnershipStatus, PatchTransactionRequest, SetTransactionBlockRequest};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -566,6 +566,110 @@ impl Client {
         request: ConfirmWalletOwnershipRequest,
     ) -> Result<SubmitTransactionResponse, SumsubError> {
         let path = format!("/resources/kyt/txns/{}/travelRuleOwnership", txn_id);
+        let response = self
+            .send_request(Method::POST, &path, Some(request))
+            .await?;
+        response.json().await.map_err(SumsubError::from)
+    }
+
+    /// Imports wallet addresses in bulk.
+    ///
+    /// [Sumsub API reference](https://docs.sumsub.com/reference/import-wallet-addresses)
+    ///
+    /// # Arguments
+    ///
+    /// * `requests` - A vector of wallet addresses to import.
+    pub async fn import_wallet_addresses(
+        &self,
+        requests: Vec<ImportWalletAddressesRequest>,
+    ) -> Result<ImportWalletAddressesResponse, SumsubError> {
+        let path = "/resources/kyt/txns/-/importAddress";
+        let body = requests
+            .into_iter()
+            .map(|r| serde_json::to_string(&r))
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(SumsubError::from)?
+            .join("\n");
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let signature = sign_request(
+            &self.secret_key,
+            ts,
+            "POST",
+            path,
+            &Some(body.clone()),
+        );
+
+        let url = format!("{}{}", BASE_URL, path);
+        let mut request_builder = self.http_client.request(Method::POST, &url);
+
+        request_builder = request_builder
+            .header("X-App-Token", &self.app_token)
+            .header("X-App-Access-Sig", signature)
+            .header("X-App-Access-Ts", ts.to_string())
+            .header("Content-Type", "application/x-ndjson")
+            .body(body);
+
+        let response = request_builder.send().await.map_err(SumsubError::from)?;
+        response.json().await.map_err(SumsubError::from)
+    }
+
+    /// Gets transaction data.
+    ///
+    /// [Sumsub API reference](https://docs.sumsub.com/reference/get-transaction-data)
+    ///
+    /// # Arguments
+    ///
+    /// * `txn_id` - The ID of the transaction to get.
+    pub async fn get_transaction_data(
+        &self,
+        txn_id: &str,
+    ) -> Result<SubmitTransactionResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}", txn_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        response.json().await.map_err(SumsubError::from)
+    }
+
+    /// Gets all transactions for an applicant.
+    ///
+    /// [Sumsub API reference](https://docs.sumsub.com/reference/get-all-transactions-for-applicant)
+    ///
+    /// # Arguments
+    ///
+    /// * `applicant_id` - The ID of the applicant.
+    pub async fn get_all_transactions_for_applicant(
+        &self,
+        applicant_id: &str,
+    ) -> Result<Vec<SubmitTransactionResponse>, SumsubError> {
+        let path = format!("/resources/kyt/txns?applicantId={}", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+
+        #[derive(serde::Deserialize)]
+        struct TransactionList {
+            list: Vec<SubmitTransactionResponse>,
+        }
+        let list: TransactionList = response.json().await.map_err(SumsubError::from)?;
+        Ok(list.list)
+    }
+
+    /// Sets the block status for a transaction.
+    ///
+    /// [Sumsub API reference](https://docs.sumsub.com/reference/set-transaction-block)
+    ///
+    /// # Arguments
+    ///
+    /// * `txn_id` - The ID of the transaction.
+    /// * `request` - The request to set the block status.
+    pub async fn set_transaction_block(
+        &self,
+        txn_id: &str,
+        request: SetTransactionBlockRequest,
+    ) -> Result<SubmitTransactionResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/block", txn_id);
         let response = self
             .send_request(Method::POST, &path, Some(request))
             .await?;
