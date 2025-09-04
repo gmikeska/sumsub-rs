@@ -7,6 +7,10 @@ use thiserror::Error;
 /// The error type for the Sumsub API client.
 #[derive(Error, Debug)]
 pub enum SumsubError {
+    /// An error returned by the Sumsub API.
+    #[error("API error (status: {status}): {message}")]
+    ApiError { status: u16, message: String },
+
     /// An error occurred while making a request with `reqwest`.
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
