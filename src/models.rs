@@ -58,9 +58,53 @@ pub struct FixedInfo {
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Info {
-    /// The company's information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub middle_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legal_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gender: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dob: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub place_of_birth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country_of_birth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_of_birth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nationality: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub addresses: Option<Vec<Address>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tin: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub company_info: Option<CompanyInfo>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Address {
+    pub country: String,
+    pub post_code: String,
+    pub town: String,
+    pub street: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_street: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flat_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_number: Option<String>,
 }
 
 
