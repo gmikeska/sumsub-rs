@@ -20,6 +20,12 @@ pub mod models;
 /// The `actions` module contains the data structures for applicant actions.
 pub mod actions;
 
+/// The `applicants` module contains the data structures for the "Applicants" section of the Sumsub API.
+pub mod applicants;
+
+/// The `checks` module contains the data structures for the "Checks" section of the Sumsub API.
+pub mod checks;
+
 /// The `kyb` module contains the data structures for business verification (KYB).
 pub mod kyb;
 

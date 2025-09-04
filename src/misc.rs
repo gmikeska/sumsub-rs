@@ -29,9 +29,45 @@ pub struct AuditTrailEvent {
     pub description: Option<String>,
 }
 
+use serde::Serialize;
+use crate::actions::RequiredIdDocs;
+
 /// Represents the health status of the API.
 #[derive(Deserialize, Debug)]
 pub struct ApiHealthStatus {
     // This endpoint returns an empty body on success, so this struct is empty.
     // The success of the call is determined by the HTTP status code.
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateAccessTokenRequest<'a> {
+    pub level_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_user_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_in_secs: Option<u64>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NewApplicantAccessTokenResponse {
+    pub token: String,
+    pub user_id: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SendVerificationMessageRequest<'a> {
+    pub lang: &'a str,
+}
+
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableLevel {
+    pub name: String,
+    pub title: String,
+    pub review_strategy: String,
+    pub required_id_docs: RequiredIdDocs,
 }
