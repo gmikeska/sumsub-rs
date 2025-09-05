@@ -35,8 +35,7 @@ use crate::actions::RequiredIdDocs;
 /// Represents the health status of the API.
 #[derive(Deserialize, Debug)]
 pub struct ApiHealthStatus {
-    // This endpoint returns an empty body on success, so this struct is empty.
-    // The success of the call is determined by the HTTP status code.
+    pub status: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -47,6 +46,21 @@ pub struct GenerateAccessTokenRequest<'a> {
     pub external_user_id: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttl_in_secs: Option<u64>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateWebsdkLinkRequest<'a> {
+    pub level_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_user_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_in_secs: Option<u64>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GenerateWebsdkLinkResponse {
+    pub url: String,
 }
 
 #[derive(Deserialize, Debug)]

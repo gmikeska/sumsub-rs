@@ -65,3 +65,32 @@ pub struct SetTransactionBlockRequest {
     pub reason: String,
     pub control: String,
 }
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWalletAddressRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_favorite: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub props: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct VaspsResponse {
+    pub list: VaspList,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct VaspList {
+    pub items: Vec<Vasp>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Vasp {
+    pub id: String,
+    pub name: String,
+    pub website: String,
+    pub logo: String,
+    pub is_test: bool,
+}
