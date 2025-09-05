@@ -37,3 +37,12 @@ pub mod travel_rule;
 
 /// The `misc` module contains data structures for miscellaneous endpoints.
 pub mod misc;
+
+/// The `non_doc` module contains data structures for the "Non-Doc Verification" section.
+pub mod non_doc;
+
+/// The `device_intelligence` module contains data structures for the "Device Intelligence" section.
+pub mod device_intelligence;
+
+/// The `webhooks` module contains functionality for handling Sumsub webhooks.
+pub mod webhooks;

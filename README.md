@@ -91,15 +91,42 @@ async fn main() {
 ```
 *Note: It is recommended to use environment variables or a secure configuration method to manage your credentials, rather than hardcoding them.*
 
+### Example: Verifying a Webhook
+
+This crate provides a utility to verify incoming webhooks from Sumsub.
+
+```rust
+use sumsub_api::webhooks;
+
+fn handle_webhook(payload: &str, signature: &str, secret_key: &str) {
+    if webhooks::verify_signature(secret_key, payload.as_bytes(), signature).is_ok() {
+        match serde_json::from_str::<webhooks::WebhookPayload>(payload) {
+            Ok(webhook_payload) => {
+                println!("Successfully deserialized webhook: {:#?}", webhook_payload);
+                // Process the webhook payload
+            }
+            Err(e) => {
+                eprintln!("Error deserializing webhook payload: {}", e);
+            }
+        }
+    } else {
+        eprintln!("Invalid webhook signature");
+    }
+}
+```
+
 ## API Coverage
 
 This client aims to provide comprehensive coverage of the Sumsub API. The following modules are currently implemented:
 
-*   **Applicants**: Create and retrieve applicant data.
-*   **Applicant Actions**: Create, retrieve, and manage applicant actions (e.g., document uploads, identity checks).
-*   **Business Verification (KYB)**: Create company applicants, link beneficiaries, and manage company data.
-*   **Transaction Monitoring (KYT)**: Submit, delete, and bulk-import transactions for risk analysis.
+*   **Applicants**: Create and retrieve applicant data, add documents, manage tags, notes, and consents.
+*   **Applicant Actions**: Create, retrieve, and manage applicant actions, including image uploads.
+*   **Business Verification (KYB)**: Create company applicants, link beneficiaries, manage company data, and get OCR results.
+*   **Transaction Monitoring (KYT)**: Submit, review, delete, and bulk-import transactions, manage tags and notes, and more.
 *   **Travel Rule**: Initiate SDKs, patch transactions, and confirm wallet ownership.
+*   **Non-Doc Verification**: Submit and verify applicant data without documents.
+*   **Device Intelligence**: Generate tokens and send device events.
+*   **Webhooks**: Verify webhook signatures and deserialize payloads.
 *   **Miscellaneous**: Check API health and retrieve audit trail events.
 
 ## Error Handling
@@ -110,6 +137,16 @@ All API methods return a `Result<T, SumsubError>`. `SumsubError` is a comprehens
 *   API errors returned by Sumsub.
 
 This makes it easy to handle failures gracefully.
+
+## Testing
+
+This crate includes a comprehensive test suite that uses `mockito` to mock the Sumsub API. This allows you to run the tests without needing real API credentials.
+
+To run the tests, use the following command:
+
+```sh
+cargo test
+```
 
 ## Contributing
 

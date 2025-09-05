@@ -167,3 +167,209 @@ pub struct ApplicantEvent {
 pub struct ChangeApplicantDataRequest {
     pub info: crate::models::Info,
 }
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddDocumentMetadata<'a> {
+    pub id_doc_type: &'a str,
+    pub country: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub middle_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dob: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub place_of_birth: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issued_date: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub number: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_doc_sub_type: Option<&'a str>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SimulateReviewRequest<'a> {
+    pub review_answer: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reject_labels: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_reject_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_comment: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation_comment: Option<&'a str>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddConsentsRequest<'a> {
+    pub accepted: Vec<&'a str>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicantFacingConsentsResponse {
+    pub consents: Vec<ApplicantFacingConsent>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplicantFacingConsent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub consent_type: String,
+    pub required: bool,
+    pub url: String,
+    pub order_index: i32,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub level_name: String,
+    pub title: String,
+    pub description: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Note {
+    pub id: String,
+    pub created_at: String,
+    pub applicant_id: String,
+    pub agent: Agent,
+    pub note: String,
+    pub attachments: Vec<Attachment>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Agent {
+    pub client_id: String,
+    pub email: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub id: String,
+    pub file_name: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddNoteRequest<'a> {
+    pub note: &'a str,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EditNoteRequest<'a> {
+    pub note: &'a str,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct VerificationStepStatus {
+    pub review_answer: String,
+    pub check_type: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewHistoryRecord {
+    pub created_at: String,
+    pub status: String,
+    pub review_answer: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageInfo {
+    pub image_id: String,
+    pub inspection_id: String,
+    pub id_doc_type: String,
+    pub added_at: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlData {
+    pub applicant: AmlApplicant,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlApplicant {
+    pub id: String,
+    pub inspection_id: String,
+    pub external_applicant_id: Option<String>,
+    pub source_key: Option<String>,
+    pub created_at_ms: u64,
+    pub info: AmlApplicantInfo,
+    pub hits: Vec<AmlHit>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlApplicantInfo {
+    pub first_name: String,
+    pub last_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub middle_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dob: Option<String>,
+    pub country: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlHit {
+    pub id: String,
+    pub hit_id_in_source: String,
+    pub source_name: String,
+    pub created_at_ms: u64,
+    pub review: AmlReview,
+    pub match_info: AmlMatchInfo,
+    pub data: serde_json::Value,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlReview {
+    pub status: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AmlMatchInfo {
+    pub match_types: Vec<String>,
+    pub match_strength: f64,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAmlHitReviewRequest<'a> {
+    pub review_status: &'a str,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeactivateApplicantRequest<'a> {
+    pub review: DeactivateApplicantReview<'a>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeactivateApplicantReview<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation_comment: Option<&'a str>,
+}

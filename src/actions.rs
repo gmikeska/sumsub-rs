@@ -152,3 +152,29 @@ pub struct GetApplicantActionsResponse {
     pub items: Vec<ApplicantAction>,
     pub total_items: u32,
 }
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AddActionImageMetadata<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_doc_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_doc_sub_type: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dob: Option<&'a str>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionImage {
+    pub image_id: String,
+    pub added_at: String,
+    pub id_doc_type: String,
+    pub id_doc_sub_type: String,
+}

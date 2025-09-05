@@ -283,3 +283,85 @@ pub struct BulkTransactionImportRequest {
 pub struct BulkTransactionImportResponse {
     pub created_cnt: u32,
 }
+
+pub enum TransactionReviewAction {
+    Approve,
+    Reject,
+}
+
+impl ToString for TransactionReviewAction {
+    fn to_string(&self) -> String {
+        match self {
+            TransactionReviewAction::Approve => "approve".to_string(),
+            TransactionReviewAction::Reject => "reject".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewTransactionRequest<'a> {
+    pub review: ReviewTransactionDetails<'a>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewTransactionDetails<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moderation_comment: Option<&'a str>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct FindTransactionsResponse {
+    pub list: TransactionItems,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TransactionItems {
+    pub items: Vec<SubmitTransactionResponse>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct AvailableCurrenciesResponse {
+    pub currencies: Vec<String>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddTransactionTagsRequest<'a> {
+    pub tags: Vec<&'a str>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTransactionTagsResponse {
+    pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveTransactionTagsRequest<'a> {
+    pub tags: Vec<&'a str>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionNote {
+    pub id: String,
+    pub created_at: String,
+    pub txn_id: String,
+    pub agent: crate::applicants::Agent,
+    pub note: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct AddTransactionNoteRequest<'a> {
+    pub note: &'a str,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct EditTransactionNoteRequest<'a> {
+    pub note: &'a str,
+}

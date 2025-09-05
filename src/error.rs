@@ -18,4 +18,8 @@ pub enum SumsubError {
     /// An error occurred during JSON serialization or deserialization.
     #[error("Serde JSON error: {0}")]
     Serde(#[from] serde_json::Error),
+
+    /// An error occurred while parsing a MIME type.
+    #[error("MIME type error: {0}")]
+    MimeError(String),
 }

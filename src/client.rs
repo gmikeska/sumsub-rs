@@ -11,15 +11,15 @@ use sha2::Sha256;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::error::SumsubError;
 use crate::models::{Applicant, CreateApplicantRequest, FixedInfo};
-use crate::misc::{ApiHealthStatus, AuditTrailEvent};
+use crate::misc::{ApiHealthStatus, AuditTrailEvent, NewApplicantAccessTokenResponse, SendVerificationMessageRequest, AvailableLevel};
 use crate::actions::{ApplicantAction, CreateApplicantActionRequest, GetApplicantActionsResponse, Questionnaire, RequestActionCheckResponse};
 use crate::kyb::{CompanyInfo, GetAdditionalCompanyCheckDataResponse, LinkBeneficiaryRequest};
 use crate::transactions::{BulkTransactionImportRequest, BulkTransactionImportResponse, DeleteTransactionResponse, SubmitTransactionRequest, SubmitTransactionResponse};
 use crate::travel_rule::{ConfirmWalletOwnershipRequest, ImportWalletAddressesRequest, ImportWalletAddressesResponse, InitiateSdkRequest, InitiateSdkResponse, OwnershipStatus, PatchTransactionRequest, SetTransactionBlockRequest};
 use crate::applicants::*;
 use crate::checks::*;
-use crate::misc::*;
 use serde::Deserialize;
+use urlencoding;
 
 
 type HmacSha256 = Hmac<Sha256>;
@@ -69,6 +69,7 @@ pub struct Client {
     app_token: String,
     secret_key: String,
     http_client: reqwest::Client,
+    base_url: String,
 }
 
 impl Client {
@@ -91,6 +92,17 @@ impl Client {
             app_token,
             secret_key,
             http_client: reqwest::Client::new(),
+            base_url: BASE_URL.to_string(),
+        }
+    }
+
+    /// Creates a new `Client` with a custom base URL for testing.
+    pub fn new_with_base_url(app_token: String, secret_key: String, base_url: String) -> Self {
+        Self {
+            app_token,
+            secret_key,
+            http_client: reqwest::Client::new(),
+            base_url,
         }
     }
 
@@ -151,7 +163,7 @@ impl Client {
             &body_str,
         );
 
-        let url = format!("{}{}", BASE_URL, path);
+        let url = format!("{}{}", self.base_url, path);
         let mut request_builder = self.http_client.request(method, &url);
 
         request_builder = request_builder
@@ -221,6 +233,60 @@ impl Client {
         applicant_id: &str,
     ) -> Result<SimilarSearchResult, SumsubError> {
         self.get_latest_check_result(applicant_id, CheckType::SimilarSearch)
+            .await
+    }
+
+    /// Retrieves the latest PoA check result for an applicant.
+    pub async fn get_latest_poa_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<PoaCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::Poa)
+            .await
+    }
+
+    /// Retrieves the latest bank card check result for an applicant.
+    pub async fn get_latest_bank_card_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<BankCardCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::BankCard)
+            .await
+    }
+
+    /// Retrieves the latest email confirmation check result for an applicant.
+    pub async fn get_latest_email_confirmation_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<EmailConfirmationCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::EmailConfirmation)
+            .await
+    }
+
+    /// Retrieves the latest phone confirmation check result for an applicant.
+    pub async fn get_latest_phone_confirmation_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<PhoneConfirmationCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::PhoneConfirmation)
+            .await
+    }
+
+    /// Retrieves the latest IP check result for an applicant.
+    pub async fn get_latest_ip_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<IpCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::IpCheck)
+            .await
+    }
+
+    /// Retrieves the latest NFC check result for an applicant.
+    pub async fn get_latest_nfc_check_result(
+        &self,
+        applicant_id: &str,
+    ) -> Result<NfcCheckResult, SumsubError> {
+        self.get_latest_check_result(applicant_id, CheckType::Nfc)
             .await
     }
 
@@ -529,7 +595,7 @@ impl Client {
             &Some(body.clone()),
         );
 
-        let url = format!("{}{}", BASE_URL, path);
+        let url = format!("{}{}", self.base_url, path);
         let mut request_builder = self.http_client.request(Method::POST, &url);
 
         request_builder = request_builder
@@ -655,7 +721,7 @@ impl Client {
             &Some(body.clone()),
         );
 
-        let url = format!("{}{}", BASE_URL, path);
+        let url = format!("{}{}", self.base_url, path);
         let mut request_builder = self.http_client.request(Method::POST, &url);
 
         request_builder = request_builder
@@ -904,6 +970,25 @@ impl Client {
 
     // Additional/Supplemental Methods
 
+    /// Generates an external WebSDK link.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#generate-external-websdk-link)
+    pub async fn generate_external_websdk_link(
+        &self,
+        level_name: &str,
+        external_user_id: Option<&str>,
+        ttl_in_secs: Option<u64>,
+    ) -> Result<GenerateWebsdkLinkResponse, SumsubError> {
+        let path = "/resources/accessTokens/-/websdkLink";
+        let request = GenerateWebsdkLinkRequest {
+            level_name,
+            external_user_id,
+            ttl_in_secs,
+        };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
     /// Generates an access token for a new applicant for the WebSDK.
     /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#generate-access-token)
     pub async fn generate_token_for_new_applicant(
@@ -1060,5 +1145,838 @@ impl Client {
             return Err(SumsubError::ApiError { status, message });
         }
         Ok(response.bytes().await?.to_vec())
+    }
+
+    /// Adds a verification document to an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-verification-documents)
+    pub async fn add_verification_document(
+        &self,
+        applicant_id: &str,
+        metadata: crate::applicants::AddDocumentMetadata<'_>,
+        content: Vec<u8>,
+        file_name: &str,
+        mime_type: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/docsets/-", applicant_id);
+
+        let metadata_str = serde_json::to_string(&metadata)?;
+
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(file_name.to_string())
+            .mime_str(mime_type)
+            .map_err(|e| SumsubError::MimeError(e.to_string()))?;
+
+        let form = reqwest::multipart::Form::new()
+            .part("metadata", reqwest::multipart::Part::text(metadata_str))
+            .part("content", part);
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let signature = sign_request(
+            &self.secret_key,
+            ts,
+            "POST",
+            &path,
+            &None,
+        );
+
+        let url = format!("{}{}", self.base_url, &path);
+        let response = self
+            .http_client
+            .post(&url)
+            .header("X-App-Token", &self.app_token)
+            .header("X-App-Access-Sig", signature)
+            .header("X-App-Access-Ts", ts.to_string())
+            .multipart(form)
+            .send()
+            .await?;
+
+        self.handle_empty_response(response).await
+    }
+
+    /// Copies an applicant profile.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#copy-applicant-profile)
+    pub async fn copy_applicant_profile(
+        &self,
+        applicant_id: &str,
+    ) -> Result<crate::models::Applicant, SumsubError> {
+        let path = format!("/resources/applicants/{}/duplicate", applicant_id);
+        let response = self.send_request(Method::POST, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Simulates a review response in the Sandbox environment.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#simulate-review-response-in-sandbox)
+    pub async fn simulate_review_response(
+        &self,
+        applicant_id: &str,
+        request: crate::applicants::SimulateReviewRequest<'_>,
+    ) -> Result<(), SumsubError> {
+        let path = format!(
+            "/resources/applicants/{}/sandbox/status/testCompleted",
+            applicant_id
+        );
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Runs an AML check for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#run-aml-check)
+    pub async fn run_aml_check(&self, applicant_id: &str) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/aml", applicant_id);
+        let response = self.send_request(Method::POST, &path, None::<()>).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets AML case data for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-aml-case-data)
+    pub async fn get_aml_case_data(
+        &self,
+        applicant_id: &str,
+    ) -> Result<crate::applicants::AmlData, SumsubError> {
+        let path = format!("/resources/applicants/{}/aml", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Updates the review status of an AML hit.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#update-aml-hit-review)
+    pub async fn update_aml_hit_review(
+        &self,
+        applicant_id: &str,
+        hit_id: &str,
+        request: crate::applicants::UpdateAmlHitReviewRequest<'_>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/aml/hits/{}", applicant_id, hit_id);
+        let response = self.send_request(Method::PATCH, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Marks an image as inactive.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#marking-image-as-inactive)
+    pub async fn mark_image_as_inactive(
+        &self,
+        applicant_id: &str,
+        image_id: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/images/{}", applicant_id, image_id);
+        let response = self.send_request(Method::DELETE, &path, None::<()>).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Deactivates an applicant profile.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#deactivate-applicant-profile)
+    pub async fn deactivate_applicant_profile(
+        &self,
+        applicant_id: &str,
+        moderation_comment: Option<&str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/deactivated", applicant_id);
+        let request = crate::applicants::DeactivateApplicantRequest {
+            review: crate::applicants::DeactivateApplicantReview {
+                moderation_comment,
+            },
+        };
+        let response = self.send_request(Method::PATCH, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds tags to an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-custom-applicant-tags)
+    pub async fn add_applicant_tags<'a>(
+        &self,
+        applicant_id: &str,
+        tags: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/tags", applicant_id);
+        let response = self.send_request(Method::POST, &path, Some(tags)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds and overwrites tags for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#adding-overwriting-custom-applicant-tags)
+    pub async fn add_and_overwrite_applicant_tags<'a>(
+        &self,
+        applicant_id: &str,
+        tags: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/tags/-/overwrite", applicant_id);
+        let response = self.send_request(Method::POST, &path, Some(tags)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Removes tags from an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#remove-custom-applicant-tags)
+    pub async fn remove_applicant_tags<'a>(
+        &self,
+        applicant_id: &str,
+        tags: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/tags", applicant_id);
+        let response = self.send_request(Method::DELETE, &path, Some(tags)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds accepted consents for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-accepted-applicant-consents)
+    pub async fn add_applicant_consents<'a>(
+        &self,
+        applicant_id: &str,
+        consents: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/consents", applicant_id);
+        let request = crate::applicants::AddConsentsRequest { accepted: consents };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets the applicant-facing consents for a given level.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-applicant-facing-consents)
+    pub async fn get_applicant_facing_consents(
+        &self,
+        level_name: &str,
+    ) -> Result<crate::applicants::ApplicantFacingConsentsResponse, SumsubError> {
+        let path = format!("/resources/sdkIntegrations/levels/{}/consents", level_name);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets notes for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-applicant-notes)
+    pub async fn get_applicant_notes(
+        &self,
+        applicant_id: &str,
+    ) -> Result<Vec<crate::applicants::Note>, SumsubError> {
+        let path = format!("/resources/applicants/{}/notes", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Adds a note to an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-applicant-note)
+    pub async fn add_applicant_note<'a>(
+        &self,
+        applicant_id: &str,
+        note: &'a str,
+    ) -> Result<crate::applicants::Note, SumsubError> {
+        let path = format!("/resources/applicants/{}/notes", applicant_id);
+        let request = crate::applicants::AddNoteRequest { note };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Edits an applicant note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#edit-applicant-note)
+    pub async fn edit_applicant_note<'a>(
+        &self,
+        applicant_id: &str,
+        note_id: &str,
+        note: &'a str,
+    ) -> Result<crate::applicants::Note, SumsubError> {
+        let path = format!("/resources/applicants/{}/notes/{}", applicant_id, note_id);
+        let request = crate::applicants::EditNoteRequest { note };
+        let response = self.send_request(Method::PATCH, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Removes an applicant note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#remove-applicant-note)
+    pub async fn remove_applicant_note(
+        &self,
+        applicant_id: &str,
+        note_id: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/notes/{}", applicant_id, note_id);
+        let response = self.send_request(Method::DELETE, &path, None::<()>).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds an attachment to an applicant note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-attachment-to-applicant-note)
+    pub async fn add_note_attachment(
+        &self,
+        applicant_id: &str,
+        note_id: &str,
+        content: Vec<u8>,
+        file_name: &str,
+        mime_type: &str,
+    ) -> Result<crate::applicants::Note, SumsubError> {
+        let path = format!("/resources/applicants/{}/notes/{}/attachments", applicant_id, note_id);
+
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(file_name.to_string())
+            .mime_str(mime_type)
+            .map_err(|e| SumsubError::MimeError(e.to_string()))?;
+
+        let form = reqwest::multipart::Form::new().part("content", part);
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let signature = sign_request(
+            &self.secret_key,
+            ts,
+            "POST",
+            &path,
+            &None,
+        );
+
+        let url = format!("{}{}", self.base_url, &path);
+        let response = self
+            .http_client
+            .post(&url)
+            .header("X-App-Token", &self.app_token)
+            .header("X-App-Access-Sig", signature)
+            .header("X-App-Access-Ts", ts.to_string())
+            .multipart(form)
+            .send()
+            .await?;
+
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Downloads an attachment from a note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#download-note-attachment)
+    pub async fn download_note_attachment(
+        &self,
+        applicant_id: &str,
+        note_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, SumsubError> {
+        let path = format!(
+            "/resources/applicants/{}/notes/{}/attachments/{}",
+            applicant_id, note_id, attachment_id
+        );
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(SumsubError::ApiError { status, message });
+        }
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    /// Removes an attachment from a note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#remove-note-attachment)
+    pub async fn remove_note_attachment(
+        &self,
+        applicant_id: &str,
+        note_id: &str,
+        attachment_id: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!(
+            "/resources/applicants/{}/notes/{}/attachments/{}",
+            applicant_id, note_id, attachment_id
+        );
+        let response = self.send_request(Method::DELETE, &path, None::<()>).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets applicant data by external user ID.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-applicant-data-externaluserid)
+    pub async fn get_applicant_data_by_external_user_id(
+        &self,
+        external_user_id: &str,
+    ) -> Result<crate::models::Applicant, SumsubError> {
+        let path = format!("/resources/applicants/-;externalUserId={}/one", external_user_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets the status of verification steps for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-status-of-verification-steps)
+    pub async fn get_verification_steps_status(
+        &self,
+        applicant_id: &str,
+    ) -> Result<std::collections::HashMap<String, crate::applicants::VerificationStepStatus>, SumsubError> {
+        let path = format!("/resources/applicants/{}/requiredIdDocsStatus", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets the review history for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-applicant-review-history)
+    pub async fn get_applicant_review_history(
+        &self,
+        applicant_id: &str,
+    ) -> Result<Vec<crate::applicants::ReviewHistoryRecord>, SumsubError> {
+        let path = format!("/resources/applicants/{}/review/history", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets a document image.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-document-images)
+    pub async fn get_document_image(
+        &self,
+        applicant_id: &str,
+        inspection_id: &str,
+        image_id: &str,
+    ) -> Result<Vec<u8>, SumsubError> {
+        let path = format!("/resources/applicants/{}/images/{}/{}", applicant_id, inspection_id, image_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(SumsubError::ApiError { status, message });
+        }
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    /// Gets information about document images for an applicant.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-information-about-document-images)
+    pub async fn get_document_images_info(
+        &self,
+        applicant_id: &str,
+    ) -> Result<Vec<crate::applicants::ImageInfo>, SumsubError> {
+        let path = format!("/resources/applicants/{}/info/images", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Adds an image to an applicant action.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-images-to-applicant-actions)
+    pub async fn add_image_to_action(
+        &self,
+        action_id: &str,
+        metadata: Option<crate::actions::AddActionImageMetadata<'_>>,
+        content: Vec<u8>,
+        file_name: &str,
+        mime_type: &str,
+    ) -> Result<Vec<crate::actions::ActionImage>, SumsubError> {
+        let path = format!("/resources/applicantActions/{}/images", action_id);
+
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(file_name.to_string())
+            .mime_str(mime_type)
+            .map_err(|e| SumsubError::MimeError(e.to_string()))?;
+
+        let mut form = reqwest::multipart::Form::new().part("content", part);
+        if let Some(metadata) = metadata {
+            let metadata_str = serde_json::to_string(&metadata)?;
+            form = form.part("metadata", reqwest::multipart::Part::text(metadata_str));
+        }
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let signature = sign_request(
+            &self.secret_key,
+            ts,
+            "POST",
+            &path,
+            &None,
+        );
+
+        let url = format!("{}{}", self.base_url, &path);
+        let response = self
+            .http_client
+            .post(&url)
+            .header("X-App-Token", &self.app_token)
+            .header("X-App-Access-Sig", signature)
+            .header("X-App-Access-Ts", ts.to_string())
+            .multipart(form)
+            .send()
+            .await?;
+
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets an image from an applicant action.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-images-from-applicant-actions)
+    pub async fn get_image_from_action(
+        &self,
+        action_id: &str,
+        image_id: &str,
+    ) -> Result<Vec<u8>, SumsubError> {
+        let path = format!("/resources/applicantActions/{}/images/{}", action_id, image_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(SumsubError::ApiError { status, message });
+        }
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    /// Gets OCR fields from company documents.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-ocr-fields-from-company-documents)
+    pub async fn get_ocr_fields_from_company_documents(
+        &self,
+        applicant_id: &str,
+    ) -> Result<std::collections::HashMap<String, String>, SumsubError> {
+        let path = format!("/resources/applicants/{}/info/companyInfo/ocr", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Submits applicant data for Non-Doc Verification.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#submit-applicant-data)
+    pub async fn submit_non_doc_data(
+        &self,
+        applicant_id: &str,
+        data: serde_json::Value,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/info/nondoc", applicant_id);
+        let response = self.send_request(Method::POST, &path, Some(data)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Confirms applicant data for Non-Doc Verification.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#confirm-applicant-data)
+    pub async fn confirm_non_doc_data<'a>(
+        &self,
+        applicant_id: &str,
+        consent: &'a str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/info/nondoc/confirm", applicant_id);
+        let request = crate::non_doc::ConfirmNonDocDataRequest { consent };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets applicant data from Non-Doc Verification.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-non-doc-applicant-data)
+    pub async fn get_non_doc_data(
+        &self,
+        applicant_id: &str,
+    ) -> Result<serde_json::Value, SumsubError> {
+        let path = format!("/resources/applicants/{}/info/nondoc", applicant_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Approves or rejects a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#approve-and-reject-transaction)
+    pub async fn review_transaction<'a>(
+        &self,
+        txn_id: &str,
+        action: crate::transactions::TransactionReviewAction,
+        moderation_comment: Option<&'a str>,
+    ) -> Result<crate::transactions::SubmitTransactionResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/review/{}", txn_id, action.to_string());
+        let request = crate::transactions::ReviewTransactionRequest {
+            review: crate::transactions::ReviewTransactionDetails {
+                moderation_comment,
+            },
+        };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Rescores a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#re-score-transaction)
+    pub async fn rescore_transaction(
+        &self,
+        txn_id: &str,
+    ) -> Result<crate::transactions::SubmitTransactionResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/rescore", txn_id);
+        let response = self.send_request(Method::POST, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Changes transaction properties.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#changing-transaction-custom-properties)
+    pub async fn change_transaction_properties(
+        &self,
+        txn_id: &str,
+        properties: serde_json::Value,
+    ) -> Result<crate::transactions::SubmitTransactionResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/info", txn_id);
+        let response = self.send_request(Method::PATCH, &path, Some(properties)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Finds specific transactions using an expression.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#find-specific-transactions)
+    pub async fn find_transactions(
+        &self,
+        expression: &str,
+    ) -> Result<crate::transactions::FindTransactionsResponse, SumsubError> {
+        let encoded_expression = urlencoding::encode(expression);
+        let path = format!("/resources/kyt/txns/search?expression={}", encoded_expression);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets the list of available currencies for transaction monitoring.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-available-currencies)
+    pub async fn get_available_currencies(
+        &self,
+    ) -> Result<crate::transactions::AvailableCurrenciesResponse, SumsubError> {
+        let path = "/resources/kyt/misc/availableCurrencies";
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Adds tags to a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-txn-tags)
+    pub async fn add_transaction_tags<'a>(
+        &self,
+        txn_id: &str,
+        tags: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/tags", txn_id);
+        let request = crate::transactions::AddTransactionTagsRequest { tags };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets tags for a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-txn-tags)
+    pub async fn get_transaction_tags(
+        &self,
+        txn_id: &str,
+    ) -> Result<crate::transactions::GetTransactionTagsResponse, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/tags", txn_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Removes tags from a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#remove-txn-tags)
+    pub async fn remove_transaction_tags<'a>(
+        &self,
+        txn_id: &str,
+        tags: Vec<&'a str>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/tags", txn_id);
+        let request = crate::transactions::RemoveTransactionTagsRequest { tags };
+        let response = self.send_request(Method::DELETE, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds a note to a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-txn-notes)
+    pub async fn add_transaction_note<'a>(
+        &self,
+        txn_id: &str,
+        note: &'a str,
+    ) -> Result<crate::transactions::TransactionNote, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/notes", txn_id);
+        let request = crate::transactions::AddTransactionNoteRequest { note };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Gets notes for a transaction.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-txn-notes)
+    pub async fn get_transaction_notes(
+        &self,
+        txn_id: &str,
+    ) -> Result<Vec<crate::transactions::TransactionNote>, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/notes", txn_id);
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Edits a transaction note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#edit-txn-notes)
+    pub async fn edit_transaction_note<'a>(
+        &self,
+        txn_id: &str,
+        note_id: &str,
+        note: &'a str,
+    ) -> Result<crate::transactions::TransactionNote, SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/notes/{}", txn_id, note_id);
+        let request = crate::transactions::EditTransactionNoteRequest { note };
+        let response = self.send_request(Method::PATCH, &path, Some(request)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Removes a transaction note.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#remove-txn-notes)
+    pub async fn remove_transaction_note(
+        &self,
+        txn_id: &str,
+        note_id: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/notes/{}", txn_id, note_id);
+        let response = self.send_request(Method::DELETE, &path, None::<()>).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Adds a payment method.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#add-payment-method)
+    pub async fn add_payment_method(
+        &self,
+        payment_method: crate::transactions::PaymentMethod,
+    ) -> Result<crate::transactions::PaymentMethod, SumsubError> {
+        let path = "/resources/kyt/misc/paymentMethods";
+        let response = self.send_request(Method::POST, &path, Some(payment_method)).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Updates a wallet address.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#update-wallet-address)
+    pub async fn update_wallet_address(
+        &self,
+        address: &str,
+        request: crate::travel_rule::UpdateWalletAddressRequest,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/kyt/txns/info/address/{}", address);
+        let response = self.send_request(Method::PATCH, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Gets the list of available VASPs.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#get-available-vasps)
+    pub async fn get_available_vasps(&self) -> Result<crate::travel_rule::VaspsResponse, SumsubError> {
+        let path = "/resources/kyt/vasps";
+        let response = self.send_request(Method::GET, &path, None::<()>).await?;
+        self.handle_response_and_deserialize(response).await
+    }
+
+    /// Generates a Device Intelligence access token.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#generate-access-token-device-intelligence)
+    pub async fn generate_device_intelligence_token(
+        &self,
+        lang: Option<&str>,
+    ) -> Result<String, SumsubError> {
+        let path = "/resources/accessTokens?type=device";
+        let request_body = if let Some(lang) = lang {
+            Some(serde_json::json!({ "lang": lang }))
+        } else {
+            None
+        };
+        let response = self.send_request(Method::POST, &path, request_body).await?;
+
+        #[derive(Deserialize)]
+        struct TokenResponse {
+            token: String,
+        }
+
+        let token_response: TokenResponse = self.handle_response_and_deserialize(response).await?;
+        Ok(token_response.token)
+    }
+
+    /// Sends an applicant platform event with captured device information.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#send-applicant-platform-event-with-captured-device)
+    pub async fn send_platform_event(
+        &self,
+        applicant_id: &str,
+        event: crate::device_intelligence::PlatformEvent<'_>,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/applicants/{}/platformEvents", applicant_id);
+        let response = self.send_request(Method::POST, &path, Some(event)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Sends financial transaction data with captured device information.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#send-financial-transaction-with-captured-device)
+    pub async fn send_financial_transaction_with_device(
+        &self,
+        txn_id: &str,
+        fingerprint: &str,
+    ) -> Result<(), SumsubError> {
+        let path = format!("/resources/kyt/txns/{}/data/applicant/device", txn_id);
+        let request = crate::device_intelligence::DeviceFingerprint { fingerprint };
+        let response = self.send_request(Method::POST, &path, Some(request)).await?;
+        self.handle_empty_response(response).await
+    }
+
+    /// Imports an applicant profile from a zip archive.
+    ///
+    /// [Sumsub API reference](https://developers.sumsub.com/api-reference/#import-applicant-profile-from-archive)
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The content of the zip archive.
+    /// * `file_name` - The name of the file.
+    pub async fn import_applicant_profile_from_archive(
+        &self,
+        content: Vec<u8>,
+        file_name: &str,
+    ) -> Result<(), SumsubError> {
+        let path = "/resources/applicants/-/ingest";
+
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(file_name.to_string())
+            .mime_str("application/zip")
+            .map_err(|e| SumsubError::MimeError(e.to_string()))?;
+
+        let form = reqwest::multipart::Form::new().part("content", part);
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let signature = sign_request(
+            &self.secret_key,
+            ts,
+            "POST",
+            path,
+            &None,
+        );
+
+        let url = format!("{}{}", self.base_url, path);
+        let response = self
+            .http_client
+            .post(&url)
+            .header("X-App-Token", &self.app_token)
+            .header("X-App-Access-Sig", signature)
+            .header("X-App-Access-Ts", ts.to_string())
+            .multipart(form)
+            .send()
+            .await?;
+
+        self.handle_empty_response(response).await
     }
 }
